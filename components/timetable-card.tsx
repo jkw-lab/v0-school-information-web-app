@@ -1,19 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Clock, AlertCircle, Settings } from 'lucide-react';
+import { Clock, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -21,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { FieldGroup, Field, FieldLabel } from '@/components/ui/field';
 import type { TimetableInfo, SavedSchool } from '@/lib/neis-types';
 import { format, addDays, startOfWeek, isToday } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -33,34 +23,44 @@ interface TimetableCardProps {
 }
 
 const SUBJECT_COLORS: Record<string, string> = {
-  '국어': 'bg-red-100 text-red-700 border-red-200',
-  '영어': 'bg-blue-100 text-blue-700 border-blue-200',
-  '수학': 'bg-amber-100 text-amber-700 border-amber-200',
-  '과학': 'bg-green-100 text-green-700 border-green-200',
-  '사회': 'bg-purple-100 text-purple-700 border-purple-200',
-  '역사': 'bg-orange-100 text-orange-700 border-orange-200',
-  '체육': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  '음악': 'bg-pink-100 text-pink-700 border-pink-200',
-  '미술': 'bg-cyan-100 text-cyan-700 border-cyan-200',
-  '도덕': 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  '기술': 'bg-slate-100 text-slate-700 border-slate-200',
-  '가정': 'bg-rose-100 text-rose-700 border-rose-200',
-  '정보': 'bg-violet-100 text-violet-700 border-violet-200',
+  '국어': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  '영어': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+  '수학': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  '과학': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  '사회': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+  '역사': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+  '체육': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+  '음악': 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300',
+  '미술': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300',
+  '도덕': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300',
+  '기술': 'bg-slate-100 text-slate-800 dark:bg-slate-700/50 dark:text-slate-300',
+  '가정': 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300',
+  '정보': 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
+  '물리': 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300',
+  '화학': 'bg-lime-100 text-lime-800 dark:bg-lime-900/30 dark:text-lime-300',
+  '생물': 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300',
+  '지구': 'bg-stone-100 text-stone-800 dark:bg-stone-700/50 dark:text-stone-300',
 };
 
 function getSubjectColor(subject: string) {
   for (const [keyword, color] of Object.entries(SUBJECT_COLORS)) {
     if (subject.includes(keyword)) return color;
   }
-  return 'bg-muted text-foreground border-border';
+  return 'bg-muted text-muted-foreground';
+}
+
+function getSubjectShort(subject: string) {
+  // 긴 과목명 줄이기
+  if (subject.length > 6) {
+    return subject.slice(0, 5) + '..';
+  }
+  return subject;
 }
 
 export function TimetableCard({ school, classInfo, onClassInfoChange }: TimetableCardProps) {
   const [timetable, setTimetable] = useState<TimetableInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [tempGrade, setTempGrade] = useState(classInfo?.grade || '1');
   const [tempClass, setTempClass] = useState(classInfo?.classNm || '1');
 
@@ -71,7 +71,7 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
     ? ['1', '2', '3', '4', '5', '6']
     : ['1', '2', '3'];
 
-  const classes = Array.from({ length: 20 }, (_, i) => String(i + 1));
+  const classes = Array.from({ length: 15 }, (_, i) => String(i + 1));
 
   useEffect(() => {
     if (!classInfo) return;
@@ -81,10 +81,6 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
       setError(null);
 
       try {
-        const fromDate = format(weekStart, 'yyyyMMdd');
-        const toDate = format(addDays(weekStart, 4), 'yyyyMMdd');
-
-        // 주간 시간표를 가져오기 위해 각 날짜별로 요청
         const params = new URLSearchParams({
           officeCode: school.officeCode,
           schoolCode: school.schoolCode,
@@ -120,9 +116,17 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
 
   const handleSaveClassInfo = () => {
     onClassInfoChange({ grade: tempGrade, classNm: tempClass });
-    setSettingsOpen(false);
   };
 
+  // 모든 요일의 최대 교시 수 계산
+  const maxPeriods = Math.max(
+    ...weekDays.map(date => getTimetableForDate(date).length),
+    7 // 최소 7교시
+  );
+
+  const periodNumbers = Array.from({ length: maxPeriods }, (_, i) => i + 1);
+
+  // 학년/반 선택 UI
   if (!classInfo) {
     return (
       <Card>
@@ -133,56 +137,37 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8">
-            <p className="text-muted-foreground mb-4">학년과 반을 설정해주세요.</p>
-            <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Settings className="h-4 w-4 mr-2" />
-                  학년/반 설정
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>학년/반 설정</DialogTitle>
-                </DialogHeader>
-                <FieldGroup className="gap-4">
-                  <Field>
-                    <FieldLabel>학년</FieldLabel>
-                    <Select value={tempGrade} onValueChange={setTempGrade}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {grades.map((g) => (
-                          <SelectItem key={g} value={g}>
-                            {g}학년
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field>
-                    <FieldLabel>반</FieldLabel>
-                    <Select value={tempClass} onValueChange={setTempClass}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {classes.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}반
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </FieldGroup>
-                <Button onClick={handleSaveClassInfo} className="mt-4">
-                  저장
-                </Button>
-              </DialogContent>
-            </Dialog>
+          <div className="space-y-4">
+            <p className="text-center text-muted-foreground">학년과 반을 선택해주세요</p>
+            <div className="flex items-center justify-center gap-2">
+              <Select value={tempGrade} onValueChange={setTempGrade}>
+                <SelectTrigger className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {grades.map((g) => (
+                    <SelectItem key={g} value={g}>
+                      {g}학년
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={tempClass} onValueChange={setTempClass}>
+                <SelectTrigger className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {classes.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}반
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={handleSaveClassInfo} className="px-6">
+                확인
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -198,113 +183,96 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
             시간표
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Badge variant="secondary">
-              {classInfo.grade}학년 {classInfo.classNm}반
-            </Badge>
-            <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-              <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>학년/반 설정</DialogTitle>
-                </DialogHeader>
-                <FieldGroup className="gap-4">
-                  <Field>
-                    <FieldLabel>학년</FieldLabel>
-                    <Select value={tempGrade} onValueChange={setTempGrade}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {grades.map((g) => (
-                          <SelectItem key={g} value={g}>
-                            {g}학년
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field>
-                    <FieldLabel>반</FieldLabel>
-                    <Select value={tempClass} onValueChange={setTempClass}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {classes.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}반
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </FieldGroup>
-                <Button onClick={handleSaveClassInfo} className="mt-4">
-                  저장
-                </Button>
-              </DialogContent>
-            </Dialog>
+            <Select value={tempGrade} onValueChange={(v) => { setTempGrade(v); onClassInfoChange({ grade: v, classNm: tempClass }); }}>
+              <SelectTrigger className="w-20 h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {grades.map((g) => (
+                  <SelectItem key={g} value={g}>
+                    {g}학년
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={tempClass} onValueChange={(v) => { setTempClass(v); onClassInfoChange({ grade: tempGrade, classNm: v }); }}>
+              <SelectTrigger className="w-20 h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {classes.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}반
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        <Tabs
-          value={format(selectedDate, 'yyyy-MM-dd')}
-          onValueChange={(v) => setSelectedDate(new Date(v))}
-        >
-          <TabsList className="w-full grid grid-cols-5 mb-4">
-            {weekDays.map((date) => (
-              <TabsTrigger
-                key={format(date, 'yyyy-MM-dd')}
-                value={format(date, 'yyyy-MM-dd')}
-                className="flex flex-col gap-0.5 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-              >
-                <span className="text-xs">{format(date, 'E', { locale: ko })}</span>
-                <span className="text-sm font-medium">{format(date, 'd')}</span>
-                {isToday(date) && (
-                  <span className="h-1 w-1 rounded-full bg-current" />
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          {weekDays.map((date) => (
-            <TabsContent key={format(date, 'yyyy-MM-dd')} value={format(date, 'yyyy-MM-dd')}>
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Spinner className="h-6 w-6" />
-                </div>
-              ) : error ? (
-                <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-                  <AlertCircle className="h-5 w-5" />
-                  <span>{error}</span>
-                </div>
-              ) : getTimetableForDate(date).length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  시간표 정보가 없습니다.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {getTimetableForDate(date).map((period) => (
-                    <div
-                      key={`${period.ALL_TI_YMD}-${period.PERIO}`}
-                      className={`flex items-center gap-3 p-3 rounded-lg border ${getSubjectColor(period.ITRT_CNTNT)}`}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Spinner className="h-6 w-6" />
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+            <AlertCircle className="h-5 w-5" />
+            <span>{error}</span>
+          </div>
+        ) : (
+          <div className="overflow-x-auto -mx-4 px-4">
+            <table className="w-full min-w-[320px] border-collapse">
+              <thead>
+                <tr>
+                  <th className="w-10 p-1.5 text-xs font-medium text-muted-foreground border-b" />
+                  {weekDays.map((date) => (
+                    <th
+                      key={format(date, 'yyyy-MM-dd')}
+                      className={`p-1.5 text-center border-b ${isToday(date) ? 'bg-primary/10' : ''}`}
                     >
-                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-background/50 text-sm font-bold">
-                        {period.PERIO}
+                      <div className="text-xs text-muted-foreground">{format(date, 'E', { locale: ko })}</div>
+                      <div className={`text-sm font-semibold ${isToday(date) ? 'text-primary' : 'text-foreground'}`}>
+                        {format(date, 'd')}
                       </div>
-                      <span className="font-medium">{period.ITRT_CNTNT}</span>
-                    </div>
+                    </th>
                   ))}
-                </div>
-              )}
-            </TabsContent>
-          ))}
-        </Tabs>
+                </tr>
+              </thead>
+              <tbody>
+                {periodNumbers.map((period) => (
+                  <tr key={period}>
+                    <td className="p-1.5 text-center text-xs font-medium text-muted-foreground border-r">
+                      {period}
+                    </td>
+                    {weekDays.map((date) => {
+                      const dayTimetable = getTimetableForDate(date);
+                      const periodData = dayTimetable.find(t => Number(t.PERIO) === period);
+                      
+                      return (
+                        <td
+                          key={format(date, 'yyyy-MM-dd')}
+                          className={`p-1 text-center ${isToday(date) ? 'bg-primary/5' : ''}`}
+                        >
+                          {periodData ? (
+                            <div
+                              className={`px-1 py-1.5 rounded text-xs font-medium truncate ${getSubjectColor(periodData.ITRT_CNTNT)}`}
+                              title={periodData.ITRT_CNTNT}
+                            >
+                              {getSubjectShort(periodData.ITRT_CNTNT)}
+                            </div>
+                          ) : (
+                            <div className="px-1 py-1.5 text-xs text-muted-foreground/50">-</div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
