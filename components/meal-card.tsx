@@ -1,24 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { UtensilsCrossed, Calendar, Flame, AlertCircle } from 'lucide-react';
+import { UtensilsCrossed, Flame, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import type { MealInfo, SavedSchool } from '@/lib/neis-types';
-import { format, addDays, startOfWeek, isToday } from 'date-fns';
+import { format, addDays, startOfWeek, isToday, addWeeks, subWeeks, isSameWeek } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 interface MealCardProps {
   school: SavedSchool;
 }
-
-const MEAL_TYPES: Record<string, string> = {
-  '1': '조식',
-  '2': '중식',
-  '3': '석식',
-};
 
 const ALLERGENS: Record<string, string> = {
   '1': '난류',
@@ -43,7 +38,6 @@ const ALLERGENS: Record<string, string> = {
 };
 
 function parseMealMenu(menu: string) {
-  // 메뉴 항목 분리 및 알레르기 정보 파싱
   const items = menu.split('<br/>').filter(Boolean);
   return items.map((item) => {
     const allergenMatch = item.match(/\(([0-9.,]+)\)/);
@@ -59,10 +53,11 @@ export function MealCard({ school }: MealCardProps) {
   const [meals, setMeals] = useState<MealInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentWeekStart, setCurrentWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedDate, setSelectedDate] = useState(new Date());
 
-  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
+  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i));
+  const isCurrentWeek = isSameWeek(currentWeekStart, new Date(), { weekStartsOn: 1 });
 
   useEffect(() => {
     const fetchMeals = async () => {
@@ -70,8 +65,8 @@ export function MealCard({ school }: MealCardProps) {
       setError(null);
 
       try {
-        const fromDate = format(weekStart, 'yyyyMMdd');
-        const toDate = format(addDays(weekStart, 4), 'yyyyMMdd');
+        const fromDate = format(currentWeekStart, 'yyyyMMdd');
+        const toDate = format(addDays(currentWeekStart, 4), 'yyyyMMdd');
 
         const params = new URLSearchParams({
           officeCode: school.officeCode,
@@ -96,22 +91,61 @@ export function MealCard({ school }: MealCardProps) {
     };
 
     fetchMeals();
-  }, [school.officeCode, school.schoolCode]);
+  }, [school.officeCode, school.schoolCode, currentWeekStart]);
+
+  // 주가 바뀌면 첫번째 날짜로 선택 변경
+  useEffect(() => {
+    const todayInWeek = weekDays.find(d => isToday(d));
+    if (todayInWeek) {
+      setSelectedDate(todayInWeek);
+    } else {
+      setSelectedDate(weekDays[0]);
+    }
+  }, [currentWeekStart]);
 
   const getMealsForDate = (date: Date) => {
     const dateStr = format(date, 'yyyyMMdd');
     return meals.filter((meal) => meal.MLSV_YMD === dateStr);
   };
 
-  const selectedMeals = getMealsForDate(selectedDate);
+  const handlePrevWeek = () => {
+    setCurrentWeekStart(subWeeks(currentWeekStart, 1));
+  };
+
+  const handleNextWeek = () => {
+    setCurrentWeekStart(addWeeks(currentWeekStart, 1));
+  };
 
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <UtensilsCrossed className="h-5 w-5 text-primary" />
-          급식 메뉴
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <UtensilsCrossed className="h-5 w-5 text-primary" />
+            급식 메뉴
+          </CardTitle>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handlePrevWeek}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium min-w-[100px] text-center">
+              {format(currentWeekStart, 'M월 d일', { locale: ko })} ~
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleNextWeek}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {/* 주간 날짜 탭 */}
@@ -119,17 +153,17 @@ export function MealCard({ school }: MealCardProps) {
           value={format(selectedDate, 'yyyy-MM-dd')}
           onValueChange={(v) => setSelectedDate(new Date(v))}
         >
-          <TabsList className="w-full grid grid-cols-5 mb-4">
+          <TabsList className="w-full grid grid-cols-5 mb-4 h-auto">
             {weekDays.map((date) => (
               <TabsTrigger
                 key={format(date, 'yyyy-MM-dd')}
                 value={format(date, 'yyyy-MM-dd')}
-                className="flex flex-col gap-0.5 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="flex flex-col gap-0.5 py-2.5 px-1 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
                 <span className="text-xs">{format(date, 'E', { locale: ko })}</span>
                 <span className="text-sm font-medium">{format(date, 'd')}</span>
                 {isToday(date) && (
-                  <span className="h-1 w-1 rounded-full bg-current" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
                 )}
               </TabsTrigger>
             ))}

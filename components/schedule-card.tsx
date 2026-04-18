@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import type { ScheduleInfo, SavedSchool } from '@/lib/neis-types';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, isSameDay, getDay } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isToday, isSameDay, getDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 interface ScheduleCardProps {
@@ -15,12 +15,12 @@ interface ScheduleCardProps {
 }
 
 const EVENT_COLORS: Record<string, string> = {
-  '휴업일': 'bg-red-100 text-red-700',
-  '시험': 'bg-amber-100 text-amber-700',
-  '방학': 'bg-sky-100 text-sky-700',
-  '개학': 'bg-green-100 text-green-700',
-  '졸업': 'bg-purple-100 text-purple-700',
-  '입학': 'bg-emerald-100 text-emerald-700',
+  '휴업일': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  '시험': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  '방학': 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+  '개학': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  '졸업': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+  '입학': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
 };
 
 function getEventColor(eventName: string) {
@@ -178,51 +178,59 @@ export function ScheduleCard({ school }: ScheduleCardProps) {
               })}
             </div>
 
-            {/* 선택된 날짜의 일정 */}
-            {selectedDate && (
-              <div className="border-t pt-4 mt-4">
-                <h4 className="font-medium text-sm mb-2">
-                  {format(selectedDate, 'M월 d일 (E)', { locale: ko })} 일정
-                </h4>
-                {selectedSchedules.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">일정이 없습니다.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {selectedSchedules.map((schedule, idx) => (
-                      <div key={idx} className="flex items-start gap-2">
-                        <Badge className={getEventColor(schedule.EVENT_NM)}>
-                          {schedule.EVENT_NM}
-                        </Badge>
-                        {schedule.EVENT_CNTNT && (
-                          <span className="text-sm text-muted-foreground">
-                            {schedule.EVENT_CNTNT}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 이번 달 주요 일정 목록 */}
-            {!selectedDate && schedules.length > 0 && (
-              <div className="border-t pt-4 mt-4">
-                <h4 className="font-medium text-sm mb-2">이번 달 주요 일정</h4>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {schedules.slice(0, 5).map((schedule, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-sm">
-                      <span className="text-muted-foreground w-12">
-                        {schedule.AA_YMD.slice(4, 6)}/{schedule.AA_YMD.slice(6, 8)}
-                      </span>
-                      <Badge className={getEventColor(schedule.EVENT_NM)} variant="secondary">
-                        {schedule.EVENT_NM}
-                      </Badge>
+            {/* 선택된 날짜의 일정 또는 이번 달 주요 일정 */}
+            <div className="border-t pt-4 mt-4">
+              {selectedDate ? (
+                <>
+                  <h4 className="font-medium text-sm mb-3">
+                    {format(selectedDate, 'M월 d일 (E)', { locale: ko })} 일정
+                  </h4>
+                  {selectedSchedules.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">일정이 없습니다.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedSchedules.map((schedule, idx) => (
+                        <div key={idx} className="flex items-start gap-2 p-2 rounded-lg bg-secondary/30">
+                          <Badge className={getEventColor(schedule.EVENT_NM)}>
+                            {schedule.EVENT_NM}
+                          </Badge>
+                          {schedule.EVENT_CNTNT && (
+                            <span className="text-sm text-muted-foreground">
+                              {schedule.EVENT_CNTNT}
+                            </span>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  )}
+                </>
+              ) : (
+                <>
+                  <h4 className="font-medium text-sm mb-3">이번 달 일정</h4>
+                  {schedules.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">일정이 없습니다.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {schedules.map((schedule, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-sm p-2 rounded-lg bg-secondary/30">
+                          <span className="text-muted-foreground shrink-0 w-12">
+                            {schedule.AA_YMD.slice(4, 6)}/{schedule.AA_YMD.slice(6, 8)}
+                          </span>
+                          <Badge className={`${getEventColor(schedule.EVENT_NM)} shrink-0`}>
+                            {schedule.EVENT_NM}
+                          </Badge>
+                          {schedule.EVENT_CNTNT && (
+                            <span className="text-muted-foreground truncate">
+                              {schedule.EVENT_CNTNT}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         )}
       </CardContent>

@@ -53,7 +53,6 @@ export function Dashboard() {
             </div>
             <div className="min-w-0 flex-1">
               <h1 className="font-bold text-foreground truncate">{school.schoolName}</h1>
-              <p className="text-xs text-muted-foreground truncate">{school.address}</p>
             </div>
           </div>
         </div>

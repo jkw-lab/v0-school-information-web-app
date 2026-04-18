@@ -50,7 +50,6 @@ function getSubjectColor(subject: string) {
 }
 
 function getSubjectShort(subject: string) {
-  // 긴 과목명 줄이기
   if (subject.length > 6) {
     return subject.slice(0, 5) + '..';
   }
@@ -81,12 +80,17 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
       setError(null);
 
       try {
+        const fromDate = format(weekStart, 'yyyyMMdd');
+        const toDate = format(addDays(weekStart, 4), 'yyyyMMdd');
+
         const params = new URLSearchParams({
           officeCode: school.officeCode,
           schoolCode: school.schoolCode,
           schoolType: school.schoolType,
           grade: classInfo.grade,
           classNm: classInfo.classNm,
+          fromDate,
+          toDate,
         });
 
         const response = await fetch(`/api/timetable?${params}`);
@@ -137,11 +141,14 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <p className="text-center text-muted-foreground">학년과 반을 선택해주세요</p>
-            <div className="flex items-center justify-center gap-2">
+          <div className="space-y-6 py-4">
+            <div className="text-center">
+              <p className="text-muted-foreground mb-2">학년과 반을 선택해주세요</p>
+              <p className="text-xs text-muted-foreground">설정은 저장되어 다음에도 유지됩니다</p>
+            </div>
+            <div className="flex items-center justify-center gap-3">
               <Select value={tempGrade} onValueChange={setTempGrade}>
-                <SelectTrigger className="w-24">
+                <SelectTrigger className="w-28">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -153,7 +160,7 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
                 </SelectContent>
               </Select>
               <Select value={tempClass} onValueChange={setTempClass}>
-                <SelectTrigger className="w-24">
+                <SelectTrigger className="w-28">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -164,7 +171,9 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
                   ))}
                 </SelectContent>
               </Select>
-              <Button onClick={handleSaveClassInfo} className="px-6">
+            </div>
+            <div className="flex justify-center">
+              <Button onClick={handleSaveClassInfo} size="lg" className="px-8">
                 확인
               </Button>
             </div>
@@ -183,7 +192,13 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
             시간표
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Select value={tempGrade} onValueChange={(v) => { setTempGrade(v); onClassInfoChange({ grade: v, classNm: tempClass }); }}>
+            <Select 
+              value={tempGrade} 
+              onValueChange={(v) => { 
+                setTempGrade(v); 
+                onClassInfoChange({ grade: v, classNm: tempClass }); 
+              }}
+            >
               <SelectTrigger className="w-20 h-8 text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -195,7 +210,13 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
                 ))}
               </SelectContent>
             </Select>
-            <Select value={tempClass} onValueChange={(v) => { setTempClass(v); onClassInfoChange({ grade: tempGrade, classNm: v }); }}>
+            <Select 
+              value={tempClass} 
+              onValueChange={(v) => { 
+                setTempClass(v); 
+                onClassInfoChange({ grade: tempGrade, classNm: v }); 
+              }}
+            >
               <SelectTrigger className="w-20 h-8 text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -219,6 +240,11 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
           <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
             <AlertCircle className="h-5 w-5" />
             <span>{error}</span>
+          </div>
+        ) : timetable.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <p>시간표 정보가 없습니다.</p>
+            <p className="text-xs mt-2">학기 시작 전이거나 데이터가 아직 등록되지 않았을 수 있습니다.</p>
           </div>
         ) : (
           <div className="overflow-x-auto -mx-4 px-4">

@@ -1,17 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { Moon, Sun, School, Mail, ExternalLink, Database } from 'lucide-react';
+import { Moon, Sun, School, Mail, Database, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { FieldGroup, Field, FieldLabel } from '@/components/ui/field';
+import { Label } from '@/components/ui/label';
 import { SchoolSearch } from './school-search';
 import { useTheme } from '@/hooks/use-theme';
 import type { SavedSchool } from '@/lib/neis-types';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -23,7 +24,7 @@ interface SettingsViewProps {
 }
 
 export function SettingsView({ school, onSchoolChange }: SettingsViewProps) {
-  const { theme, toggleTheme, isDark } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
   const [schoolDialogOpen, setSchoolDialogOpen] = useState(false);
 
   const handleSchoolSelect = (newSchool: SavedSchool) => {
@@ -42,9 +43,12 @@ export function SettingsView({ school, onSchoolChange }: SettingsViewProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="p-4 rounded-lg bg-secondary/50">
+          <div className="p-4 rounded-lg bg-secondary/50 space-y-2">
             <p className="font-medium text-foreground">{school.schoolName}</p>
-            <p className="text-sm text-muted-foreground mt-1">{school.address}</p>
+            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+              <MapPin className="h-4 w-4 mt-0.5 shrink-0" />
+              <p>{school.address}</p>
+            </div>
           </div>
           <Dialog open={schoolDialogOpen} onOpenChange={setSchoolDialogOpen}>
             <DialogTrigger asChild>
@@ -56,6 +60,9 @@ export function SettingsView({ school, onSchoolChange }: SettingsViewProps) {
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>학교 검색</DialogTitle>
+                <DialogDescription>
+                  학교 이름을 검색하여 선택하세요.
+                </DialogDescription>
               </DialogHeader>
               <SchoolSearch 
                 onSelect={handleSchoolSelect} 
@@ -75,23 +82,22 @@ export function SettingsView({ school, onSchoolChange }: SettingsViewProps) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <FieldGroup>
-            <Field className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {isDark ? <Moon className="h-5 w-5 text-muted-foreground" /> : <Sun className="h-5 w-5 text-muted-foreground" />}
-                <div>
-                  <FieldLabel className="text-base font-medium cursor-pointer">다크 모드</FieldLabel>
-                  <p className="text-sm text-muted-foreground">
-                    {isDark ? '어두운 테마 사용 중' : '밝은 테마 사용 중'}
-                  </p>
-                </div>
-              </div>
-              <Switch
-                checked={isDark}
-                onCheckedChange={toggleTheme}
-              />
-            </Field>
-          </FieldGroup>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {isDark ? <Moon className="h-5 w-5 text-muted-foreground" /> : <Sun className="h-5 w-5 text-muted-foreground" />}
+              <Label htmlFor="dark-mode" className="cursor-pointer">
+                <span className="text-base font-medium">다크 모드</span>
+                <p className="text-sm text-muted-foreground font-normal">
+                  {isDark ? '어두운 테마 사용 중' : '밝은 테마 사용 중'}
+                </p>
+              </Label>
+            </div>
+            <Switch
+              id="dark-mode"
+              checked={isDark}
+              onCheckedChange={toggleTheme}
+            />
+          </div>
         </CardContent>
       </Card>
 

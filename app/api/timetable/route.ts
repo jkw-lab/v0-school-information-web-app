@@ -8,7 +8,8 @@ export async function GET(request: NextRequest) {
   const schoolType = searchParams.get('schoolType');
   const grade = searchParams.get('grade');
   const classNm = searchParams.get('classNm');
-  const date = searchParams.get('date');
+  const fromDate = searchParams.get('fromDate');
+  const toDate = searchParams.get('toDate');
 
   if (!officeCode || !schoolCode || !schoolType || !grade || !classNm) {
     return NextResponse.json({ error: '필수 정보가 누락되었습니다.' }, { status: 400 });
@@ -21,7 +22,8 @@ export async function GET(request: NextRequest) {
       schoolType,
       grade,
       classNm,
-      date || undefined
+      fromDate || undefined,
+      toDate || undefined
     );
     return NextResponse.json(timetable);
   } catch (error) {

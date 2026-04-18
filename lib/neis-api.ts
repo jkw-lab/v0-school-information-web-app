@@ -113,7 +113,8 @@ export async function getElementaryTimetable(
   schoolCode: string,
   grade: string,
   classNm: string,
-  date?: string
+  fromDate?: string,
+  toDate?: string
 ): Promise<TimetableInfo[]> {
   const params: Record<string, string> = {
     ATPT_OFCDC_SC_CODE: officeCode,
@@ -122,8 +123,11 @@ export async function getElementaryTimetable(
     CLASS_NM: classNm,
   };
 
-  if (date) {
-    params.ALL_TI_YMD = date;
+  if (fromDate) {
+    params.TI_FROM_YMD = fromDate;
+  }
+  if (toDate) {
+    params.TI_TO_YMD = toDate;
   }
 
   return fetchNEIS<TimetableInfo>('elsTimetable', params);
@@ -135,7 +139,8 @@ export async function getMiddleTimetable(
   schoolCode: string,
   grade: string,
   classNm: string,
-  date?: string
+  fromDate?: string,
+  toDate?: string
 ): Promise<TimetableInfo[]> {
   const params: Record<string, string> = {
     ATPT_OFCDC_SC_CODE: officeCode,
@@ -144,8 +149,11 @@ export async function getMiddleTimetable(
     CLASS_NM: classNm,
   };
 
-  if (date) {
-    params.ALL_TI_YMD = date;
+  if (fromDate) {
+    params.TI_FROM_YMD = fromDate;
+  }
+  if (toDate) {
+    params.TI_TO_YMD = toDate;
   }
 
   return fetchNEIS<TimetableInfo>('misTimetable', params);
@@ -157,7 +165,8 @@ export async function getHighTimetable(
   schoolCode: string,
   grade: string,
   classNm: string,
-  date?: string
+  fromDate?: string,
+  toDate?: string
 ): Promise<TimetableInfo[]> {
   const params: Record<string, string> = {
     ATPT_OFCDC_SC_CODE: officeCode,
@@ -166,8 +175,11 @@ export async function getHighTimetable(
     CLASS_NM: classNm,
   };
 
-  if (date) {
-    params.ALL_TI_YMD = date;
+  if (fromDate) {
+    params.TI_FROM_YMD = fromDate;
+  }
+  if (toDate) {
+    params.TI_TO_YMD = toDate;
   }
 
   return fetchNEIS<TimetableInfo>('hisTimetable', params);
@@ -180,14 +192,15 @@ export async function getTimetable(
   schoolType: string,
   grade: string,
   classNm: string,
-  date?: string
+  fromDate?: string,
+  toDate?: string
 ): Promise<TimetableInfo[]> {
   if (schoolType.includes('초등')) {
-    return getElementaryTimetable(officeCode, schoolCode, grade, classNm, date);
+    return getElementaryTimetable(officeCode, schoolCode, grade, classNm, fromDate, toDate);
   } else if (schoolType.includes('중학')) {
-    return getMiddleTimetable(officeCode, schoolCode, grade, classNm, date);
+    return getMiddleTimetable(officeCode, schoolCode, grade, classNm, fromDate, toDate);
   } else {
-    return getHighTimetable(officeCode, schoolCode, grade, classNm, date);
+    return getHighTimetable(officeCode, schoolCode, grade, classNm, fromDate, toDate);
   }
 }
 
