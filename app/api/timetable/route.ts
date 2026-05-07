@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   const classNm = searchParams.get('classNm');
   const fromDate = searchParams.get('fromDate');
   const toDate = searchParams.get('toDate');
+  const includeClassroom = searchParams.get('includeClassroom') === 'true';
 
   if (!officeCode || !schoolCode || !schoolType || !grade || !classNm) {
     return NextResponse.json({ error: '필수 정보가 누락되었습니다.' }, { status: 400 });
@@ -23,7 +24,8 @@ export async function GET(request: NextRequest) {
       grade,
       classNm,
       fromDate || undefined,
-      toDate || undefined
+      toDate || undefined,
+      includeClassroom
     );
     return NextResponse.json(timetable);
   } catch (error) {

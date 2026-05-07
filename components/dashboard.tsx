@@ -7,6 +7,7 @@ import { TimetableCard } from './timetable-card';
 import { SettingsView } from './settings-view';
 import { useSchool } from '@/hooks/use-school';
 import { useClassInfo } from '@/hooks/use-class-info';
+import { useAppSettings } from '@/hooks/use-app-settings';
 import { Clock, UtensilsCrossed, CalendarDays, Settings, GraduationCap } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 
@@ -16,6 +17,7 @@ export function Dashboard() {
   const { school, setSchool, isLoading: isSchoolLoading } = useSchool();
   const { classInfo, setClassInfo, isLoading: isClassLoading } = useClassInfo();
   const [activeTab, setActiveTab] = useState<TabType>('timetable');
+  const appSettings = useAppSettings();
 
   // 로딩 중 표시
   if (isSchoolLoading || isClassLoading) {
@@ -65,6 +67,9 @@ export function Dashboard() {
             school={school}
             classInfo={classInfo}
             onClassInfoChange={setClassInfo}
+            subjectColors={appSettings.subjectColors}
+            timetableDisplay={appSettings.timetableDisplay}
+            onSubjectsFound={appSettings.registerSubjects}
           />
         )}
         {activeTab === 'meal' && (
@@ -77,6 +82,7 @@ export function Dashboard() {
           <SettingsView 
             school={school} 
             onSchoolChange={setSchool}
+            appSettings={appSettings}
           />
         )}
       </main>

@@ -81,6 +81,26 @@ export interface TimetableInfo {
   CLASS_NM: string;           // 반명
   PERIO: string;              // 교시
   ITRT_CNTNT: string;         // 수업내용 (과목명)
+  CLRM_NM?: string;           // 강의실명
+  TCHR_NM?: string;           // 교사명(제공되는 경우)
+  LOAD_DTM: string;
+}
+
+
+export interface TimeClassroomInfo {
+  ATPT_OFCDC_SC_CODE: string;
+  ATPT_OFCDC_SC_NM: string;
+  SD_SCHUL_CODE: string;
+  SCHUL_NM: string;
+  AY: string;
+  GRADE: string;
+  CLASS_NM?: string;
+  SEM: string;
+  SCHUL_CRSE_SC_NM?: string;
+  DGHT_CRSE_SC_NM?: string;
+  ORD_SC_NM?: string;
+  DDDEP_NM?: string;
+  CLRM_NM?: string;
   LOAD_DTM: string;
 }
 

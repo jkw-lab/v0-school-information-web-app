@@ -1,4 +1,4 @@
-import type { SchoolInfo, MealInfo, ScheduleInfo, TimetableInfo } from './neis-types';
+import type { SchoolInfo, MealInfo, ScheduleInfo, TimetableInfo, TimeClassroomInfo } from './neis-types';
 
 const NEIS_API_BASE = 'https://open.neis.go.kr/hub';
 
@@ -166,7 +166,8 @@ export async function getHighTimetable(
   grade: string,
   classNm: string,
   fromDate?: string,
-  toDate?: string
+  toDate?: string,
+  classroomName?: string
 ): Promise<TimetableInfo[]> {
   const params: Record<string, string> = {
     ATPT_OFCDC_SC_CODE: officeCode,
@@ -181,8 +182,52 @@ export async function getHighTimetable(
   if (toDate) {
     params.TI_TO_YMD = toDate;
   }
+  if (classroomName) {
+    params.CLRM_NM = classroomName;
+  }
 
   return fetchNEIS<TimetableInfo>('hisTimetable', params);
+}
+
+
+// 시간표 강의실 정보 조회
+export async function getTimeClassroomInfo(
+  officeCode: string,
+  schoolCode: string,
+  grade?: string,
+  year?: string,
+  semester?: string
+): Promise<TimeClassroomInfo[]> {
+  const params: Record<string, string> = {
+    ATPT_OFCDC_SC_CODE: officeCode,
+    SD_SCHUL_CODE: schoolCode,
+  };
+
+  if (grade) params.GRADE = grade;
+  if (year) params.AY = year;
+  if (semester) params.SEM = semester;
+
+  return fetchNEIS<TimeClassroomInfo>('tiClrminfo', params);
+}
+
+function getTimetableMatchKey(item: TimetableInfo) {
+  return [item.ALL_TI_YMD, item.PERIO, item.ITRT_CNTNT].join('|');
+}
+
+function mergeClassroomInfo(base: TimetableInfo[], classroomRows: TimetableInfo[]) {
+  const classroomByKey = new Map<string, string>();
+
+  classroomRows.forEach((item) => {
+    const classroom = item.CLRM_NM?.trim();
+    if (!classroom) return;
+    const key = getTimetableMatchKey(item);
+    if (!classroomByKey.has(key)) classroomByKey.set(key, classroom);
+  });
+
+  return base.map((item) => ({
+    ...item,
+    CLRM_NM: item.CLRM_NM?.trim() || classroomByKey.get(getTimetableMatchKey(item)) || item.CLRM_NM,
+  }));
 }
 
 // 학교 종류에 따른 시간표 API 선택
@@ -193,15 +238,28 @@ export async function getTimetable(
   grade: string,
   classNm: string,
   fromDate?: string,
-  toDate?: string
+  toDate?: string,
+  includeClassroom = false
 ): Promise<TimetableInfo[]> {
   if (schoolType.includes('초등')) {
     return getElementaryTimetable(officeCode, schoolCode, grade, classNm, fromDate, toDate);
   } else if (schoolType.includes('중학')) {
     return getMiddleTimetable(officeCode, schoolCode, grade, classNm, fromDate, toDate);
-  } else {
-    return getHighTimetable(officeCode, schoolCode, grade, classNm, fromDate, toDate);
   }
+
+  const base = await getHighTimetable(officeCode, schoolCode, grade, classNm, fromDate, toDate);
+  if (!includeClassroom || base.length === 0) return base;
+
+  const sample = base[0];
+  const rooms = await getTimeClassroomInfo(officeCode, schoolCode, grade, sample.AY, sample.SEM);
+  const roomNames = Array.from(new Set(rooms.map((room) => room.CLRM_NM?.trim()).filter(Boolean))).slice(0, 80) as string[];
+  if (roomNames.length === 0) return base;
+
+  const classroomRows = (await Promise.all(
+    roomNames.map((roomName) => getHighTimetable(officeCode, schoolCode, grade, classNm, fromDate, toDate, roomName).catch(() => []))
+  )).flat();
+
+  return mergeClassroomInfo(base, classroomRows);
 }
 
 // 날짜 포맷팅 유틸리티

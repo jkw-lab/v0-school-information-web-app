@@ -6,6 +6,14 @@ type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'theme';
 
+function applyTheme(newTheme: Theme) {
+  if (newTheme === 'dark') {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+}
+
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>('light');
   const [isLoading, setIsLoading] = useState(true);
@@ -16,22 +24,12 @@ export function useTheme() {
       setThemeState(stored);
       applyTheme(stored);
     } else {
-      // 시스템 설정 확인
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const defaultTheme = prefersDark ? 'dark' : 'light';
-      setThemeState(defaultTheme);
-      applyTheme(defaultTheme);
+      // 설정 탭을 처음 열었을 때 시스템 다크모드 때문에 갑자기 전환되지 않도록 기본값을 light로 고정합니다.
+      setThemeState('light');
+      applyTheme('light');
     }
     setIsLoading(false);
   }, []);
-
-  const applyTheme = (newTheme: Theme) => {
-    if (newTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
 
   const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme);
@@ -39,9 +37,11 @@ export function useTheme() {
     applyTheme(newTheme);
   }, []);
 
-  const toggleTheme = useCallback(() => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
+  const toggleTheme = useCallback((checked?: boolean) => {
+    const nextTheme: Theme = typeof checked === 'boolean'
+      ? (checked ? 'dark' : 'light')
+      : (theme === 'light' ? 'dark' : 'light');
+    setTheme(nextTheme);
   }, [theme, setTheme]);
 
   return {

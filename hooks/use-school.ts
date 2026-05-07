@@ -5,13 +5,13 @@ import type { SavedSchool } from '@/lib/neis-types';
 
 const STORAGE_KEY = 'selected-school';
 
-// 북일고등학교 기본값 (세종특별자치시교육청)
+// 북일고등학교 기본값 (충청남도 천안시)
 const DEFAULT_SCHOOL: SavedSchool = {
   officeCode: 'N10',
   schoolCode: '8140270',
   schoolName: '북일고등학교',
   schoolType: '고등학교',
-  address: '세종특별자치시 도움4로 50',
+  address: '충청남도 천안시 동남구 단대로 69',
 };
 
 export function useSchool() {
@@ -22,7 +22,15 @@ export function useSchool() {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
-        setSchoolState(JSON.parse(stored));
+        
+        const parsed = JSON.parse(stored) as SavedSchool;
+        const isWrongBukilDefault = parsed.schoolName === '북일고등학교' && parsed.address.includes('세종');
+        if (isWrongBukilDefault) {
+          setSchoolState(DEFAULT_SCHOOL);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SCHOOL));
+        } else {
+          setSchoolState(parsed);
+        }
       } catch {
         localStorage.removeItem(STORAGE_KEY);
         setSchoolState(DEFAULT_SCHOOL);
