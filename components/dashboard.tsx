@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { MealCard } from './meal-card';
 import { ScheduleCard } from './schedule-card';
 import { TimetableCard } from './timetable-card';
 import { SettingsView } from './settings-view';
 import { useSchool } from '@/hooks/use-school';
 import { useClassInfo } from '@/hooks/use-class-info';
+import { useAppSettings } from '@/hooks/use-app-settings';
 import { Clock, UtensilsCrossed, CalendarDays, Settings, GraduationCap } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 
@@ -16,6 +17,7 @@ export function Dashboard() {
   const { school, setSchool, isLoading: isSchoolLoading } = useSchool();
   const { classInfo, setClassInfo, isLoading: isClassLoading } = useClassInfo();
   const [activeTab, setActiveTab] = useState<TabType>('timetable');
+  const appSettings = useAppSettings();
 
   // 로딩 중 표시
   if (isSchoolLoading || isClassLoading) {
@@ -43,7 +45,7 @@ export function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-[calc(5rem+env(safe-area-inset-bottom))]">
       {/* 헤더 */}
       <header className="sticky top-0 z-10 bg-card border-b">
         <div className="max-w-lg mx-auto px-4 py-3">
@@ -65,6 +67,9 @@ export function Dashboard() {
             school={school}
             classInfo={classInfo}
             onClassInfoChange={setClassInfo}
+            subjectColors={appSettings.subjectColors}
+            timetableDisplay={appSettings.timetableDisplay}
+            onSubjectsFound={appSettings.registerSubjects}
           />
         )}
         {activeTab === 'meal' && (
@@ -76,7 +81,11 @@ export function Dashboard() {
         {activeTab === 'settings' && (
           <SettingsView 
             school={school} 
-            onSchoolChange={setSchool}
+            onSchoolChange={(nextSchool) => {
+              if (nextSchool.schoolCode !== school.schoolCode || nextSchool.officeCode !== school.officeCode) setClassInfo(null);
+              setSchool(nextSchool);
+            }}
+            appSettings={appSettings}
           />
         )}
       </main>
@@ -92,6 +101,7 @@ export function Dashboard() {
               return (
                 <button
                   key={tab.id}
+                  aria-current={isActive ? 'page' : undefined}
                   onClick={() => setActiveTab(tab.id)}
                   className={`
                     flex flex-col items-center gap-1 py-3 px-4 min-w-[64px] transition-colors

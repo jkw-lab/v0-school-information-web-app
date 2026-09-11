@@ -1,5 +1,7 @@
 'use client';
 
+import { readStorage, writeStorage, removeStorage, isRecord } from '@/lib/storage';
+
 import { useState, useEffect, useCallback } from 'react';
 
 interface ClassInfo {
@@ -14,12 +16,14 @@ export function useClassInfo() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = readStorage(STORAGE_KEY);
     if (stored) {
       try {
-        setClassInfoState(JSON.parse(stored));
+        const parsed: unknown = JSON.parse(stored);
+        if (!isRecord(parsed) || typeof parsed.grade !== 'string' || typeof parsed.classNm !== 'string' || !/^[1-6]$/.test(parsed.grade) || !/^\d{1,3}$/.test(parsed.classNm)) throw new Error('Invalid class');
+        setClassInfoState({ grade: parsed.grade, classNm: parsed.classNm });
       } catch {
-        localStorage.removeItem(STORAGE_KEY);
+        removeStorage(STORAGE_KEY);
       }
     }
     setIsLoading(false);
@@ -28,15 +32,15 @@ export function useClassInfo() {
   const setClassInfo = useCallback((info: ClassInfo | null) => {
     setClassInfoState(info);
     if (info) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(info));
+      writeStorage(STORAGE_KEY, JSON.stringify(info));
     } else {
-      localStorage.removeItem(STORAGE_KEY);
+      removeStorage(STORAGE_KEY);
     }
   }, []);
 
   const clearClassInfo = useCallback(() => {
     setClassInfoState(null);
-    localStorage.removeItem(STORAGE_KEY);
+    removeStorage(STORAGE_KEY);
   }, []);
 
   return {

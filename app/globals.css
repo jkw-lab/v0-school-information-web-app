@@ -75,7 +75,7 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-sans), 'Noto Sans KR', sans-serif;
+  --font-sans: var(--font-noto-sans), 'Noto Sans KR', sans-serif;
   --font-mono: 'Geist Mono', 'Geist Mono Fallback';
   --color-background: var(--background);
   --color-foreground: var(--foreground);

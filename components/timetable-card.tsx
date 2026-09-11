@@ -1,10 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Clock, AlertCircle } from 'lucide-react';
+import { fetchArray } from '@/lib/client-api';
+
+import { writeStorage, readStringMap } from '@/lib/storage';
+
+import { useEffect, useMemo, useState } from 'react';
+import { Clock, AlertCircle, Pencil, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -13,58 +25,76 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { TimetableInfo, SavedSchool } from '@/lib/neis-types';
+import type { SubjectColorMap, TimetableDisplaySettings } from '@/hooks/use-app-settings';
+import { DEFAULT_SUBJECT_COLORS } from '@/hooks/use-app-settings';
 import { format, addDays, startOfWeek, isToday } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 interface TimetableCardProps {
   school: SavedSchool;
   classInfo: { grade: string; classNm: string } | null;
   onClassInfoChange: (info: { grade: string; classNm: string }) => void;
+  subjectColors?: SubjectColorMap;
+  timetableDisplay?: TimetableDisplaySettings;
+  onSubjectsFound?: (subjects: string[]) => void;
 }
 
-const SUBJECT_COLORS: Record<string, string> = {
-  '국어': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-  '영어': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-  '수학': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-  '과학': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-  '사회': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
-  '역사': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-  '체육': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
-  '음악': 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300',
-  '미술': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300',
-  '도덕': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300',
-  '기술': 'bg-slate-100 text-slate-800 dark:bg-slate-700/50 dark:text-slate-300',
-  '가정': 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300',
-  '정보': 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
-  '물리': 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300',
-  '화학': 'bg-lime-100 text-lime-800 dark:bg-lime-900/30 dark:text-lime-300',
-  '생물': 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300',
-  '지구': 'bg-stone-100 text-stone-800 dark:bg-stone-700/50 dark:text-stone-300',
-};
+const SUBJECT_OVERRIDE_STORAGE_KEY = 'subject-overrides';
 
-function getSubjectColor(subject: string) {
-  for (const [keyword, color] of Object.entries(SUBJECT_COLORS)) {
-    if (subject.includes(keyword)) return color;
+type SubjectOverrideMap = Record<string, string>;
+
+function getSubjectColor(subject: string, subjectColors: SubjectColorMap = DEFAULT_SUBJECT_COLORS) {
+  if (subjectColors[subject]) return subjectColors[subject];
+
+  const normalizedSubject = subject.replace(/\s+/g, '');
+  for (const [keyword, color] of Object.entries(subjectColors)) {
+    if (normalizedSubject.includes(keyword.replace(/\s+/g, ''))) return color;
   }
   return 'bg-muted text-muted-foreground';
 }
 
 function getSubjectShort(subject: string) {
-  if (subject.length > 6) {
-    return subject.slice(0, 5) + '..';
-  }
+  if (subject.length > 6) return `${subject.slice(0, 5)}…`;
   return subject;
 }
 
-export function TimetableCard({ school, classInfo, onClassInfoChange }: TimetableCardProps) {
+function readOverrides(): SubjectOverrideMap {
+  return readStringMap(SUBJECT_OVERRIDE_STORAGE_KEY);
+}
+
+function getCellKey(school: SavedSchool, classInfo: { grade: string; classNm: string }, item: TimetableInfo) {
+  return [school.schoolCode, classInfo.grade, classInfo.classNm, item.ALL_TI_YMD, item.PERIO, item.ITRT_CNTNT].join('|');
+}
+
+function normalizeTeacherName(item: TimetableInfo) {
+  return item.TCHR_NM?.trim() || '';
+}
+
+function normalizeClassroomName(item: TimetableInfo) {
+  return item.CLRM_NM?.trim() || '';
+}
+
+export function TimetableCard({
+  school,
+  classInfo,
+  onClassInfoChange,
+  subjectColors = DEFAULT_SUBJECT_COLORS,
+  timetableDisplay = { showClassroom: false, showTeacher: false },
+  onSubjectsFound,
+}: TimetableCardProps) {
   const [timetable, setTimetable] = useState<TimetableInfo[]>([]);
+  const [overrides, setOverrides] = useState<SubjectOverrideMap>({});
+  const [editing, setEditing] = useState<{ key: string; original: string; value: string } | null>(null);
+  const [expandedCell, setExpandedCell] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [tempGrade, setTempGrade] = useState(classInfo?.grade || '1');
   const [tempClass, setTempClass] = useState(classInfo?.classNm || '1');
 
-  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const weekDays = useMemo(() => Array.from({ length: 5 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
   const grades = school.schoolType.includes('초등')
     ? ['1', '2', '3', '4', '5', '6']
@@ -73,11 +103,23 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
   const classes = Array.from({ length: 15 }, (_, i) => String(i + 1));
 
   useEffect(() => {
-    if (!classInfo) return;
+    setOverrides(readOverrides());
+  }, []);
 
+  useEffect(() => {
+    if (!classInfo) return;
+    setTempGrade(classInfo.grade);
+    setTempClass(classInfo.classNm);
+  }, [classInfo]);
+
+  useEffect(() => {
+    if (!classInfo) { setTimetable([]); return; }
+
+    const controller = new AbortController();
     const fetchTimetable = async () => {
       setIsLoading(true);
       setError(null);
+      setTimetable([]);
 
       try {
         const fromDate = format(weekStart, 'yyyyMMdd');
@@ -92,24 +134,28 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
           fromDate,
           toDate,
         });
+        if (timetableDisplay.showClassroom) params.set('includeClassroom', 'true');
 
-        const response = await fetch(`/api/timetable?${params}`);
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error);
-        }
-
+        const data = await fetchArray<TimetableInfo>(`/api/timetable?${params}`, controller.signal);
+        if (controller.signal.aborted) return;
         setTimetable(data);
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : '시간표를 불러올 수 없습니다.');
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) setIsLoading(false);
       }
     };
 
     fetchTimetable();
-  }, [school.officeCode, school.schoolCode, school.schoolType, classInfo]);
+    return () => controller.abort();
+  }, [retryCount, school.officeCode, school.schoolCode, school.schoolType, classInfo, weekStart, timetableDisplay.showClassroom]);
+
+  useEffect(() => {
+    if (!classInfo || timetable.length === 0) return;
+    const subjects = timetable.map((item) => overrides[getCellKey(school, classInfo ?? { grade: item.GRADE, classNm: item.CLASS_NM }, item)] || item.ITRT_CNTNT);
+    onSubjectsFound?.(subjects);
+  }, [timetable, overrides, school, classInfo, onSubjectsFound]);
 
   const getTimetableForDate = (date: Date) => {
     const dateStr = format(date, 'yyyyMMdd');
@@ -118,19 +164,41 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
       .sort((a, b) => Number(a.PERIO) - Number(b.PERIO));
   };
 
+  const getDisplaySubject = (item: TimetableInfo) => {
+    if (!classInfo) return item.ITRT_CNTNT;
+    const key = getCellKey(school, classInfo, item);
+    return overrides[key] || item.ITRT_CNTNT;
+  };
+
+  const saveOverride = () => {
+    if (!editing) return;
+
+    const next = { ...overrides };
+    const trimmed = editing.value.trim();
+    if (!trimmed || trimmed === editing.original) {
+      delete next[editing.key];
+    } else {
+      next[editing.key] = trimmed;
+    }
+
+    if (!writeStorage(SUBJECT_OVERRIDE_STORAGE_KEY, JSON.stringify(next))) {
+      setError('저장 공간을 사용할 수 없어 과목명을 저장하지 못했습니다. 브라우저 설정을 확인해주세요.');
+      return;
+    }
+    setOverrides(next);
+    setEditing(null);
+  };
+
   const handleSaveClassInfo = () => {
     onClassInfoChange({ grade: tempGrade, classNm: tempClass });
   };
 
-  // 모든 요일의 최대 교시 수 계산
   const maxPeriods = Math.max(
-    ...weekDays.map(date => getTimetableForDate(date).length),
-    7 // 최소 7교시
+    ...timetable.map((item) => Number(item.PERIO) || 0),
+    7
   );
-
   const periodNumbers = Array.from({ length: maxPeriods }, (_, i) => i + 1);
 
-  // 학년/반 선택 UI
   if (!classInfo) {
     return (
       <Card>
@@ -148,34 +216,16 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
             </div>
             <div className="flex items-center justify-center gap-3">
               <Select value={tempGrade} onValueChange={setTempGrade}>
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {grades.map((g) => (
-                    <SelectItem key={g} value={g}>
-                      {g}학년
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+                <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                <SelectContent>{grades.map((g) => <SelectItem key={g} value={g}>{g}학년</SelectItem>)}</SelectContent>
               </Select>
               <Select value={tempClass} onValueChange={setTempClass}>
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {classes.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}반
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+                <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                <SelectContent>{classes.map((c) => <SelectItem key={c} value={c}>{c}반</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="flex justify-center">
-              <Button onClick={handleSaveClassInfo} size="lg" className="px-8">
-                확인
-              </Button>
+              <Button onClick={handleSaveClassInfo} size="lg" className="px-8">확인</Button>
             </div>
           </div>
         </CardContent>
@@ -186,81 +236,50 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Clock className="h-5 w-5 text-primary" />
             시간표
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Select 
-              value={tempGrade} 
-              onValueChange={(v) => { 
-                setTempGrade(v); 
-                onClassInfoChange({ grade: v, classNm: tempClass }); 
-              }}
-            >
-              <SelectTrigger className="w-20 h-8 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {grades.map((g) => (
-                  <SelectItem key={g} value={g}>
-                    {g}학년
-                  </SelectItem>
-                ))}
-              </SelectContent>
+            <Select value={tempGrade} onValueChange={(v) => { setTempGrade(v); onClassInfoChange({ grade: v, classNm: tempClass }); }}>
+              <SelectTrigger className="w-20 h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>{grades.map((g) => <SelectItem key={g} value={g}>{g}학년</SelectItem>)}</SelectContent>
             </Select>
-            <Select 
-              value={tempClass} 
-              onValueChange={(v) => { 
-                setTempClass(v); 
-                onClassInfoChange({ grade: tempGrade, classNm: v }); 
-              }}
-            >
-              <SelectTrigger className="w-20 h-8 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {classes.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}반
-                  </SelectItem>
-                ))}
-              </SelectContent>
+            <Select value={tempClass} onValueChange={(v) => { setTempClass(v); onClassInfoChange({ grade: tempGrade, classNm: v }); }}>
+              <SelectTrigger className="w-20 h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>{classes.map((c) => <SelectItem key={c} value={c}>{c}반</SelectItem>)}</SelectContent>
             </Select>
           </div>
+        </div>
+        <div className="flex items-center justify-between pt-2">
+          <Button variant="ghost" size="icon" aria-label="이전 주 시간표" onClick={() => setWeekStart((date) => addDays(date, -7))}><ChevronLeft className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="sm" aria-label="이번 주 시간표로 이동" onClick={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))}>
+            {format(weekStart, 'M.d')} – {format(addDays(weekStart, 4), 'M.d')} · 이번 주로
+          </Button>
+          <Button variant="ghost" size="icon" aria-label="다음 주 시간표" onClick={() => setWeekStart((date) => addDays(date, 7))}><ChevronRight className="h-4 w-4" /></Button>
         </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Spinner className="h-6 w-6" />
-          </div>
+          <div className="flex items-center justify-center py-12"><Spinner className="h-6 w-6" /></div>
         ) : error ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-            <AlertCircle className="h-5 w-5" />
-            <span>{error}</span>
-          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2 py-12 text-muted-foreground"><AlertCircle className="h-5 w-5" /><span role="alert">{error}</span><Button variant="outline" size="sm" onClick={() => setRetryCount((count) => count + 1)}>다시 시도</Button></div>
         ) : timetable.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <p>시간표 정보가 없습니다.</p>
             <p className="text-xs mt-2">학기 시작 전이거나 데이터가 아직 등록되지 않았을 수 있습니다.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto -mx-4 px-4">
-            <table className="w-full min-w-[320px] border-collapse">
+          <div className="-mx-2 px-2">
+            <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
               <thead>
                 <tr>
-                  <th className="w-10 p-1.5 text-xs font-medium text-muted-foreground border-b" />
+                  <th className="w-7 p-1 font-medium text-muted-foreground border-b" />
                   {weekDays.map((date) => (
-                    <th
-                      key={format(date, 'yyyy-MM-dd')}
-                      className={`p-1.5 text-center border-b ${isToday(date) ? 'bg-primary/10' : ''}`}
-                    >
+                    <th key={format(date, 'yyyy-MM-dd')} className={cn('p-1 text-center border-b', isToday(date) && 'bg-primary/10')}>
                       <div className="text-xs text-muted-foreground">{format(date, 'E', { locale: ko })}</div>
-                      <div className={`text-sm font-semibold ${isToday(date) ? 'text-primary' : 'text-foreground'}`}>
-                        {format(date, 'd')}
-                      </div>
+                      <div className={cn('text-xs font-semibold', isToday(date) ? 'text-primary' : 'text-foreground')}>{format(date, 'd')}</div>
                     </th>
                   ))}
                 </tr>
@@ -268,27 +287,51 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
               <tbody>
                 {periodNumbers.map((period) => (
                   <tr key={period}>
-                    <td className="p-1.5 text-center text-xs font-medium text-muted-foreground border-r">
-                      {period}
-                    </td>
+                    <td className="p-1 text-center font-medium text-muted-foreground border-r align-top">{period}</td>
                     {weekDays.map((date) => {
                       const dayTimetable = getTimetableForDate(date);
-                      const periodData = dayTimetable.find(t => Number(t.PERIO) === period);
-                      
+                      const periodData = dayTimetable.find((t) => Number(t.PERIO) === period);
+                      const dateKey = format(date, 'yyyy-MM-dd');
+
+                      if (!periodData) {
+                        return <td key={dateKey} className={cn('p-0.5 text-center align-top', isToday(date) && 'bg-primary/5')}><div className="px-0.5 py-1.5 text-muted-foreground/50">-</div></td>;
+                      }
+
+                      const cellKey = getCellKey(school, classInfo, periodData);
+                      const subject = getDisplaySubject(periodData);
+                      const classroom = timetableDisplay.showClassroom ? normalizeClassroomName(periodData) : '';
+                      const teacher = timetableDisplay.showTeacher ? normalizeTeacherName(periodData) : '';
+                      const isExpanded = expandedCell === cellKey;
+
                       return (
-                        <td
-                          key={format(date, 'yyyy-MM-dd')}
-                          className={`p-1 text-center ${isToday(date) ? 'bg-primary/5' : ''}`}
-                        >
-                          {periodData ? (
-                            <div
-                              className={`px-1 py-1.5 rounded text-xs font-medium truncate ${getSubjectColor(periodData.ITRT_CNTNT)}`}
-                              title={periodData.ITRT_CNTNT}
+                        <td key={dateKey} className={cn('p-0.5 text-center align-top', isToday(date) && 'bg-primary/5')}>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedCell(isExpanded ? null : cellKey)}
+                            className={cn(
+                              'w-full rounded px-0.5 py-1 text-center font-medium leading-tight transition',
+                              'min-h-[38px] sm:min-h-[42px]',
+                              getSubjectColor(subject, subjectColors)
+                            )}
+                            aria-expanded={isExpanded}
+                            title={subject}
+                          >
+                            <span className={cn('block break-words', !isExpanded && 'truncate')}>{isExpanded ? subject : getSubjectShort(subject)}</span>
+                            {(classroom || teacher) && (
+                              <span className="mt-0.5 block text-xs font-normal opacity-80 leading-tight">
+                                {[classroom, teacher].filter(Boolean).join(' · ')}
+                              </span>
+                            )}
+                          </button>
+                          {isExpanded && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="mt-1 h-6 w-full px-1 text-xs"
+                              onClick={() => setEditing({ key: cellKey, original: periodData.ITRT_CNTNT, value: subject })}
                             >
-                              {getSubjectShort(periodData.ITRT_CNTNT)}
-                            </div>
-                          ) : (
-                            <div className="px-1 py-1.5 text-xs text-muted-foreground/50">-</div>
+                              <Pencil className="mr-1 h-3 w-3" /> 수정
+                            </Button>
                           )}
                         </td>
                       );
@@ -297,9 +340,28 @@ export function TimetableCard({ school, classInfo, onClassInfoChange }: Timetabl
                 ))}
               </tbody>
             </table>
+            <p className="mt-3 text-xs text-muted-foreground">과목명이 잘리면 한 번 터치해서 전체 이름을 볼 수 있습니다. 선택과목은 펼친 뒤 수정할 수 있습니다.</p>
           </div>
         )}
       </CardContent>
+
+      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>과목명 수정</DialogTitle>
+            <DialogDescription>선택과목명처럼 실제 표시명을 바꾸고 싶을 때 사용하세요. 이 값은 로컬에 저장됩니다.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input value={editing?.value || ''} onChange={(e) => setEditing((prev) => prev ? { ...prev, value: e.target.value } : prev)} />
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={() => setEditing((prev) => prev ? { ...prev, value: prev.original } : prev)}>
+                <X className="mr-1 h-4 w-4" /> 기본값
+              </Button>
+              <Button onClick={saveOverride}>저장</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

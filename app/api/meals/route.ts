@@ -1,8 +1,11 @@
+import { apiError, validateDates } from '@/lib/api-response';
 import { NextRequest, NextResponse } from 'next/server';
 import { getMealInfo } from '@/lib/neis-api';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
+  const dateError = validateDates(searchParams);
+  if (dateError) return NextResponse.json({ error: dateError }, { status: 400 });
   const officeCode = searchParams.get('officeCode');
   const schoolCode = searchParams.get('schoolCode');
   const date = searchParams.get('date');
@@ -23,7 +26,6 @@ export async function GET(request: NextRequest) {
     );
     return NextResponse.json(meals);
   } catch (error) {
-    console.error('급식 조회 오류:', error);
-    return NextResponse.json({ error: '급식 정보 조회 중 오류가 발생했습니다.' }, { status: 500 });
+    return apiError(error);
   }
 }

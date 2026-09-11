@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { Search, School, MapPin, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Search, School, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -21,7 +22,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import type { SchoolInfo, SavedSchool } from '@/lib/neis-types';
-import { OFFICE_CODES, type OfficeName } from '@/lib/neis-types';
+import { OFFICE_CODES } from '@/lib/neis-types';
 
 interface SchoolSearchProps {
   onSelect: (school: SavedSchool) => void;
@@ -31,45 +32,57 @@ interface SchoolSearchProps {
 export function SchoolSearch({ onSelect, selectedSchool }: SchoolSearchProps) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedOffice, setSelectedOffice] = useState<string>('');
+  const [selectedOffice, setSelectedOffice] = useState<string>('all');
   const [results, setResults] = useState<SchoolInfo[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const pendingSearch = useRef<AbortController | null>(null);
+  useEffect(() => () => pendingSearch.current?.abort(), []);
+
   const handleSearch = async () => {
-    if (searchQuery.length < 2) {
+    if (isSearching) return;
+    if (searchQuery.trim().length < 2) {
       setError('학교명을 2자 이상 입력해주세요.');
       return;
     }
 
+    pendingSearch.current?.abort();
+    const controller = new AbortController();
+    pendingSearch.current = controller;
+    setResults([]);
     setIsSearching(true);
     setError(null);
 
     try {
-      const params = new URLSearchParams({ name: searchQuery });
-      if (selectedOffice) {
+      const params = new URLSearchParams({ name: searchQuery.trim() });
+      if (selectedOffice && selectedOffice !== 'all') {
         params.set('officeCode', selectedOffice);
       }
 
-      const response = await fetch(`/api/schools/search?${params}`);
+      const response = await fetch(`/api/schools/search?${params}`, { signal: controller.signal });
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || '검색 중 오류가 발생했습니다.');
       }
 
+      if (controller.signal.aborted) return;
+      if (!Array.isArray(data)) throw new Error('올바르지 않은 검색 결과입니다.');
       setResults(data);
       if (data.length === 0) {
         setError('검색 결과가 없습니다.');
       }
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : '검색 중 오류가 발생했습니다.');
     } finally {
-      setIsSearching(false);
+      if (!controller.signal.aborted) setIsSearching(false);
     }
   };
 
   const handleSelect = (school: SchoolInfo) => {
+    pendingSearch.current?.abort();
     const saved: SavedSchool = {
       schoolCode: school.SD_SCHUL_CODE,
       officeCode: school.ATPT_OFCDC_SC_CODE,
@@ -117,6 +130,7 @@ export function SchoolSearch({ onSelect, selectedSchool }: SchoolSearchProps) {
             <Search className="h-5 w-5" />
             학교 검색
           </DialogTitle>
+          <DialogDescription>학교 이름과 지역으로 검색하세요.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <Select value={selectedOffice} onValueChange={setSelectedOffice}>
@@ -135,12 +149,13 @@ export function SchoolSearch({ onSelect, selectedSchool }: SchoolSearchProps) {
 
           <div className="flex gap-2">
             <Input
+              aria-label="학교명"
               placeholder="학교명을 입력하세요"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
             />
-            <Button onClick={handleSearch} disabled={isSearching}>
+            <Button aria-label="학교 검색" onClick={handleSearch} disabled={isSearching}>
               {isSearching ? <Spinner className="h-4 w-4" /> : <Search className="h-4 w-4" />}
             </Button>
           </div>

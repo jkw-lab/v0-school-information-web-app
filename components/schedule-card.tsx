@@ -1,5 +1,7 @@
 'use client';
 
+import { fetchArray } from '@/lib/client-api';
+
 import { useEffect, useState } from 'react';
 import { CalendarDays, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,11 +35,13 @@ function getEventColor(eventName: string) {
 export function ScheduleCard({ school }: ScheduleCardProps) {
   const [schedules, setSchedules] = useState<ScheduleInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchSchedules = async () => {
       setIsLoading(true);
       setError(null);
@@ -53,23 +57,20 @@ export function ScheduleCard({ school }: ScheduleCardProps) {
           toDate,
         });
 
-        const response = await fetch(`/api/schedule?${params}`);
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error);
-        }
-
+        const data = await fetchArray<ScheduleInfo>(`/api/schedule?${params}`, controller.signal);
+        if (controller.signal.aborted) return;
         setSchedules(data);
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : '학사일정을 불러올 수 없습니다.');
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) setIsLoading(false);
       }
     };
 
     fetchSchedules();
-  }, [school.officeCode, school.schoolCode, currentMonth]);
+    return () => controller.abort();
+  }, [retryCount, school.officeCode, school.schoolCode, currentMonth]);
 
   const getSchedulesForDate = (date: Date) => {
     const dateStr = format(date, 'yyyyMMdd');
@@ -99,7 +100,8 @@ export function ScheduleCard({ school }: ScheduleCardProps) {
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+              aria-label="이전 달"
+              onClick={() => { setCurrentMonth(subMonths(currentMonth, 1)); setSelectedDate(null); }}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -110,7 +112,8 @@ export function ScheduleCard({ school }: ScheduleCardProps) {
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+              aria-label="다음 달"
+              onClick={() => { setCurrentMonth(addMonths(currentMonth, 1)); setSelectedDate(null); }}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -123,9 +126,9 @@ export function ScheduleCard({ school }: ScheduleCardProps) {
             <Spinner className="h-6 w-6" />
           </div>
         ) : error ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-center gap-2 py-8 text-muted-foreground">
             <AlertCircle className="h-5 w-5" />
-            <span>{error}</span>
+            <span role="alert">{error}</span><Button variant="outline" size="sm" onClick={() => setRetryCount((count) => count + 1)}>다시 시도</Button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -157,6 +160,8 @@ export function ScheduleCard({ school }: ScheduleCardProps) {
                 return (
                   <button
                     key={day.toISOString()}
+                    aria-label={format(day, 'yyyy년 M월 d일')}
+                    aria-pressed={!!isSelected}
                     onClick={() => setSelectedDate(isSelected ? null : day)}
                     className={`
                       aspect-square flex flex-col items-center justify-center rounded-lg text-sm

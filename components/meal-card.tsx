@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { fetchArray } from '@/lib/client-api';
+
+import { useEffect, useMemo, useState } from 'react';
 import { UtensilsCrossed, Flame, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -8,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import type { MealInfo, SavedSchool } from '@/lib/neis-types';
-import { format, addDays, startOfWeek, isToday, addWeeks, subWeeks, isSameWeek } from 'date-fns';
+import { format, addDays, startOfWeek, isToday, addWeeks, subWeeks, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 interface MealCardProps {
@@ -38,12 +40,12 @@ const ALLERGENS: Record<string, string> = {
 };
 
 function parseMealMenu(menu: string) {
-  const items = menu.split('<br/>').filter(Boolean);
+  const items = menu.split(/<br\s*\/?\s*>/i).filter(Boolean);
   return items.map((item) => {
     const allergenMatch = item.match(/\(([0-9.,]+)\)/);
     const name = item.replace(/\([0-9.,]+\)/g, '').trim();
     const allergens = allergenMatch
-      ? allergenMatch[1].split('.').map((n) => ALLERGENS[n]).filter(Boolean)
+      ? allergenMatch[1].split(/[.,]/).map((n) => ALLERGENS[n]).filter(Boolean)
       : [];
     return { name, allergens };
   });
@@ -52,14 +54,15 @@ function parseMealMenu(menu: string) {
 export function MealCard({ school }: MealCardProps) {
   const [meals, setMeals] = useState<MealInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [currentWeekStart, setCurrentWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedDate, setSelectedDate] = useState(new Date());
 
-  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i));
-  const isCurrentWeek = isSameWeek(currentWeekStart, new Date(), { weekStartsOn: 1 });
+  const weekDays = useMemo(() => Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i)), [currentWeekStart]);
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchMeals = async () => {
       setIsLoading(true);
       setError(null);
@@ -75,23 +78,20 @@ export function MealCard({ school }: MealCardProps) {
           toDate,
         });
 
-        const response = await fetch(`/api/meals?${params}`);
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error);
-        }
-
+        const data = await fetchArray<MealInfo>(`/api/meals?${params}`, controller.signal);
+        if (controller.signal.aborted) return;
         setMeals(data);
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : '급식 정보를 불러올 수 없습니다.');
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) setIsLoading(false);
       }
     };
 
     fetchMeals();
-  }, [school.officeCode, school.schoolCode, currentWeekStart]);
+    return () => controller.abort();
+  }, [retryCount, school.officeCode, school.schoolCode, currentWeekStart]);
 
   // 주가 바뀌면 첫번째 날짜로 선택 변경
   useEffect(() => {
@@ -101,7 +101,7 @@ export function MealCard({ school }: MealCardProps) {
     } else {
       setSelectedDate(weekDays[0]);
     }
-  }, [currentWeekStart]);
+  }, [weekDays]);
 
   const getMealsForDate = (date: Date) => {
     const dateStr = format(date, 'yyyyMMdd');
@@ -129,6 +129,7 @@ export function MealCard({ school }: MealCardProps) {
               variant="ghost"
               size="icon"
               className="h-8 w-8"
+              aria-label="이전 주 급식"
               onClick={handlePrevWeek}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -140,6 +141,7 @@ export function MealCard({ school }: MealCardProps) {
               variant="ghost"
               size="icon"
               className="h-8 w-8"
+              aria-label="다음 주 급식"
               onClick={handleNextWeek}
             >
               <ChevronRight className="h-4 w-4" />
@@ -151,7 +153,7 @@ export function MealCard({ school }: MealCardProps) {
         {/* 주간 날짜 탭 */}
         <Tabs
           value={format(selectedDate, 'yyyy-MM-dd')}
-          onValueChange={(v) => setSelectedDate(new Date(v))}
+          onValueChange={(v) => setSelectedDate(parseISO(v))}
         >
           <TabsList className="w-full grid grid-cols-5 mb-4 h-auto">
             {weekDays.map((date) => (
@@ -176,9 +178,9 @@ export function MealCard({ school }: MealCardProps) {
                   <Spinner className="h-6 w-6" />
                 </div>
               ) : error ? (
-                <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+                <div className="flex flex-wrap items-center justify-center gap-2 py-8 text-muted-foreground">
                   <AlertCircle className="h-5 w-5" />
-                  <span>{error}</span>
+                  <span role="alert">{error}</span><Button variant="outline" size="sm" onClick={() => setRetryCount((count) => count + 1)}>다시 시도</Button>
                 </div>
               ) : getMealsForDate(date).length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
